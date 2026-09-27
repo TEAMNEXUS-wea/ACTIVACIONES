@@ -12,11 +12,11 @@ WORKDIR /app
 # Copiar absolutamente todo el proyecto (incluyendo el datos.zip)
 COPY . /app
 
-# 1. DESCOMPRIMIR PRIMERO: Extrae todas las carpetas y scripts (.py sueltos) en la raíz
+# Descomprimir archivos en la ruta actual
 RUN if [ -f datos.zip ]; then unzip -o datos.zip -d /app/ && rm datos.zip; fi
 
-# 2. INSTALAR DEPENDENCIAS: Corre el requerimientos de tus librerías
+# Instalar tus librerías de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. ENCENDER EL BOT: Arranca el script principal una vez que todo fue descomprimido
-CMD ["python", "Masterbot.py"]
+# COMANDO INTELIGENTE: Busca Masterbot.py en cualquier subcarpeta y lo ejecuta desde ahí
+CMD ["sh", "-c", "python $(find . -name Masterbot.py -print -quit)"]
