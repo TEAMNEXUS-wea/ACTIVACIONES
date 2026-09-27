@@ -16,4 +16,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 RUN playwright install --with-deps
 
-CMD ["sh", "-c", "python $(find . -name Masterbot.py -print -quit)"]
+# COMANDO DIRECTO: Apunta directamente al archivo principal
+CMD ["python", "Masterbot.py"]
