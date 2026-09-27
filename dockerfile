@@ -12,11 +12,11 @@ WORKDIR /app
 # Copiar absolutamente todo el proyecto (incluyendo el datos.zip)
 COPY . /app
 
-# Descomprimir las carpetas automáticamente en el servidor
-RUN if [ -f datos.zip ]; then unzip -o datos.zip && rm datos.zip; fi
+# 1. DESCOMPRIMIR PRIMERO: Extrae todas las carpetas y scripts (.py sueltos) en la raíz
+RUN if [ -f datos.zip ]; then unzip -o datos.zip -d /app/ && rm datos.zip; fi
 
-# Instalar tus librerías de Python
+# 2. INSTALAR DEPENDENCIAS: Corre el requerimientos de tus librerías
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Comando para arrancar tu bot
+# 3. ENCENDER EL BOT: Arranca el script principal una vez que todo fue descomprimido
 CMD ["python", "Masterbot.py"]
