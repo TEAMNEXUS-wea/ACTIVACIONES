@@ -2201,6 +2201,8 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("genkey", genkey))
     app.add_handler(CommandHandler("canjearkey", canjearkey))
     app.add_handler(CommandHandler("estado", estado))
+    app.add_handler(CommandHandler("listakeys", listakeys))
+    app.add_handler(CommandHandler("limpiarkeys", limpiarkeys))
     # >>>>>>>>>> FIN HANDLERS DE KEYS <<<<<<<<<<
     app.add_handler(MessageHandler(filters.Document.ALL, upload_handler))
     app.add_handler(CallbackQueryHandler(callback_handler))
