@@ -839,7 +839,7 @@ async def tv_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"Error en comando /tv: {e}")
 
---- COMANDOS DE KEYS ---
+# --- COMANDOS DE KEYS ---
 async def generarkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
     args = context.args
