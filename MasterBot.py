@@ -14,6 +14,7 @@ import copy
 import threading
 import telegram.error
 import requests
+import string  # <--- AGREGA ESTO
 try:
     import psutil
 except ImportError:
@@ -233,7 +234,68 @@ def increment_user_hits(user):
     profiles[key] = profile
     guardar_json(PROFILES_FILE, profiles)
     return profile
+--- SISTEMA DE KEYS DE ACCESO ---
+KEYS_FILE = "keys.json"
 
+def load_keys():
+    return cargar_json(KEYS_FILE, {})
+
+def save_keys(data):
+    guardar_json(KEYS_FILE, data)
+
+def generate_key_string(length=16):
+    """Genera una key tipo: ABCD-1234-EFGH-5678"""
+    chars = string.ascii_uppercase + string.digits
+    return '-'.join(''.join(random.choice(chars) for _ in range(4)) for _ in range(4))
+
+def add_key(days=30):
+    key = generate_key_string()
+    expires_at = int(time.time()) + (days * 86400)
+    keys = load_keys()
+    keys[key] = {"expires_at": expires_at, "used_by": None, "created_at": int(time.time())}
+    save_keys(keys)
+    return key, expires_at
+
+def redeem_key(user_id, key):
+    keys = load_keys()
+    key = key.strip().upper()
+    
+    if key not in keys:
+        return False, "❌ KEY INVÁLIDA: No existe en la base de datos."
+    if keys[key]["used_by"] is not None:
+        return False, "❌ KEY AGOTADA: Esta key ya fue utilizada por otro usuario."
+    if keys[key]["expires_at"] < time.time():
+        del keys[key]
+        save_keys(keys)
+        return False, "❌ KEY EXPIRADA: Esta key perdió su validez."
+    
+    # Activar la key
+    keys[key]["used_by"] = user_id
+    save_keys(keys)
+    
+    # Guardar la expiración en el perfil del usuario
+    profiles = cargar_json(PROFILES_FILE, {})
+    if str(user_id) not in profiles:
+        profiles[str(user_id)] = {}
+    profiles[str(user_id)]["key_expires_at"] = keys[key]["expires_at"]
+    profiles[str(user_id)]["key_activated_at"] = int(time.time())
+    guardar_json(PROFILES_FILE, profiles)
+    
+    return True, keys[key]["expires_at"]
+
+def check_user_key(user_id):
+    """Retorna (True, expires_at) si es válido, (False, 0) si no."""
+    if user_id == OWNER_ID:
+        return True, 9999999999  # El Owner siempre tiene acceso ilimitado
+    
+    profiles = cargar_json(PROFILES_FILE, {})
+    user_profile = profiles.get(str(user_id), {})
+    expires_at = user_profile.get("key_expires_at", 0)
+    
+    if expires_at > time.time():
+        return True, expires_at
+    return False, 0
+    
 async def ref_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != 'private': return
     user = update.effective_user
@@ -558,6 +620,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_html(start_text, reply_markup=START_COMMANDS_MARKUP)
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != 'private': return
+    
+    user_id = update.effective_user.id
+    
+    # --- VERIFICACIÓN DE KEY ---
+    is_valid, _ = check_user_key(user_id)
+    if not is_valid:
+        await update.message.reply_html(
+            "<code>\n"
+            " ╔══════════════════════════════════╗\n"
+            " ║   [!] ACCESO RESTRINGIDO        ║\n"
+            " ╠══════════════════════════════════╣\n"
+            " ║ Necesitas una KEY válida para    ║\n"
+            " ║ acceder a este sistema.          ║\n"
+            " ║ Usa /canjearkey <KEY>            ║\n"
+            " ╚══════════════════════════════════╝\n"
+            "</code>" + FOOTER
+        )
+        return
+    # ---------------------------
+    
+    referral_payload = context.args[0] if context.args else ""
+    # ... (el resto de tu código original de start sigue igual) ...
+
 async def open_help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != 'private':
         return
@@ -751,6 +838,94 @@ async def tv_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_html("<code>⚠️ Error: La conexión con Netflix ha expirado.</code>")
     except Exception as e:
         print(f"Error en comando /tv: {e}")
+
+--- COMANDOS DE KEYS ---
+async def generarkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID: return
+    args = context.args
+    days = 30
+    if args and args[0].isdigit():
+        days = int(args[0])
+    
+    key, expires_at = add_key(days)
+    expires_date = datetime.fromtimestamp(expires_at).strftime("%Y-%m-%d %H:%M")
+    
+    msg = (
+        "<code>\n"
+        " ╔══════════════════════════════════╗\n"
+        " ║   ░▒▓█ KEY GENERATOR █▓▒░       ║\n"
+        " ╚══════════════════════════════════╝\n\n"
+        f" 🔑 <b>KEY:</b> <code>{key}</code>\n"
+        f" ⏳ <b>DURACIÓN:</b> {days} días\n"
+        f" 📅 <b>EXPIRA:</b> {expires_date}\n\n"
+        " [!] Copia y envía esta key al usuario.\n"
+        "</code>"
+    )
+    await update.message.reply_html(msg + FOOTER)
+
+async def canjearkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if update.effective_chat.type != 'private': return
+    
+    args = context.args
+    if not args:
+        await update.message.reply_html("<code>[!] USO: /canjearkey &lt;KEY&gt;</code>")
+        return
+    
+    key = args[0].strip().upper()
+    success, result = redeem_key(user_id, key)
+    
+    if success:
+        expires_date = datetime.fromtimestamp(result).strftime("%Y-%m-%d %H:%M")
+        days_left = (result - int(time.time())) // 86400
+        msg = (
+            "<code>\n"
+            " ╔══════════════════════════════════╗\n"
+            " ║   ░▒▓█ KEY ACTIVADA █▓▒░        ║\n"
+            " ╚══════════════════════════════════╝\n\n"
+            " ✅ <b>¡ACCESO CONCEDIDO!</b>\n"
+            f" ⏳ <b>Días restantes:</b> {days_left}\n"
+            f" 📅 <b>Válido hasta:</b> {expires_date}\n\n"
+            " [!] Ahora tienes acceso completo al arsenal.\n"
+            "</code>"
+        )
+        await update.message.reply_html(msg + FOOTER)
+    else:
+        await update.message.reply_html(f"<code>{result}</code>")
+
+async def estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if update.effective_chat.type != 'private': return
+    
+    is_valid, expires_at = check_user_key(user_id)
+    
+    if user_id == OWNER_ID:
+        msg = "<code>\n ╔══════════════════════════════════╗\n ║   ░▒▓█ ESTADO DE ACCESO █▓▒░    ║\n ╚══════════════════════════════════╝\n\n [!] ERES EL OWNER. ACCESO ILIMITADO.\n</code>"
+    elif is_valid:
+        expires_date = datetime.fromtimestamp(expires_at).strftime("%Y-%m-%d %H:%M")
+        days_left = (expires_at - int(time.time())) // 86400
+        msg = (
+            "<code>\n"
+            " ╔══════════════════════════════════╗\n"
+            " ║   ░▒▓█ ESTADO DE ACCESO █▓▒░    ║\n"
+            " ╚══════════════════════════════════╝\n\n"
+            " ✅ <b>ACCESO: ACTIVO</b>\n"
+            f" ⏳ <b>Días restantes:</b> {days_left}\n"
+            f" 📅 <b>Expira:</b> {expires_date}\n"
+            "</code>"
+        )
+    else:
+        msg = (
+            "<code>\n"
+            " ╔══════════════════════════════════╗\n"
+            " ║   ░▒▓█ ESTADO DE ACCESO █▓▒░    ║\n"
+            " ╚══════════════════════════════════╝\n\n"
+            " ❌ <b>ACCESO: INACTIVO</b>\n"
+            " [!] Necesitas una KEY válida para usar el bot.\n"
+            " [!] Usa /canjearkey &lt;KEY&gt; para activar.\n"
+            "</code>"
+        )
+    await update.message.reply_html(msg + FOOTER)
 
 # --- MANEJADORES ---
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2320,6 +2495,9 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.Document.ALL, upload_handler))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(CommandHandler("generarkey", generarkey))
+    app.add_handler(CommandHandler("canjearkey", canjearkey))
+    app.add_handler(CommandHandler("estado", estado))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     # app.add_handler(MessageHandler(filters.Document.ALL, nfx.file_upload))
     
