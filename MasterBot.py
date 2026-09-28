@@ -797,6 +797,120 @@ async def estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # >>>>>>>>>> FIN COMANDOS DE KEYS <<<<<<<<<<
 # =====================================================================
 
+# =====================================================================
+# >>>>>>>>>> COMANDO LISTAKEYS <<<<<<<<<<
+# =====================================================================
+async def listakeys(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID: return
+    
+    keys = load_keys()
+    
+    if not keys:
+        await update.message.reply_html("<code>[!] No hay keys generadas todavía.</code>")
+        return
+    
+    # Clasificar keys
+    available = []  # Keys sin usar
+    used = []       # Keys usadas
+    expired = []    # Keys expiradas
+    
+    now = time.time()
+    
+    for key, data in keys.items():
+        expires_at = data.get("expires_at", 0)
+        used_by = data.get("used_by")
+        
+        if expires_at < now:
+            expired.append((key, data))
+        elif used_by:
+            used.append((key, data))
+        else:
+            available.append((key, data))
+    
+    # Construir mensaje
+    msg = (
+        "<code>\n"
+        " ╔══════════════════════════════════╗\n"
+        " ║   ░▒▓█ KEY DATABASE PRO █▓▒░     ║\n"
+        " ╚══════════════════════════════════╝\n\n"
+        f" 📊 <b>TOTAL KEYS:</b> {len(keys)}\n"
+        f" ✅ <b>DISPONIBLES:</b> {len(available)}\n"
+        f" 👤 <b>USADAS:</b> {len(used)}\n"
+        f" ❌ <b>EXPIRADAS:</b> {len(expired)}\n\n"
+        " <b>━━━━━━━━━━━━━━━━━━━━</b>\n"
+    )
+    
+    # Mostrar keys disponibles
+    if available:
+        msg += "\n<b>🟢 KEYS DISPONIBLES:</b>\n"
+        for i, (key, data) in enumerate(available[:10], 1):
+            expires_date = datetime.fromtimestamp(data["expires_at"]).strftime("%Y-%m-%d")
+            msg += f" [{i:02d}] <code>{key}</code>\n      └ Expira: {expires_date}\n"
+        if len(available) > 10:
+            msg += f"      ... y {len(available) - 10} más\n"
+    
+    # Mostrar keys usadas
+    if used:
+        msg += "\n<b>🔵 KEYS USADAS:</b>\n"
+        for i, (key, data) in enumerate(used[:10], 1):
+            expires_date = datetime.fromtimestamp(data["expires_at"]).strftime("%Y-%m-%d")
+            used_by = data.get("used_by", "Unknown")
+            msg += f" [{i:02d}] <code>{key}</code>\n      ├ User ID: <code>{used_by}</code>\n      └ Expira: {expires_date}\n"
+        if len(used) > 10:
+            msg += f"      ... y {len(used) - 10} más\n"
+    
+    # Mostrar keys expiradas
+    if expired:
+        msg += "\n<b>🔴 KEYS EXPIRADAS:</b>\n"
+        for i, (key, data) in enumerate(expired[:5], 1):
+            msg += f" [{i:02d}] <code>{key}</code>\n"
+        if len(expired) > 5:
+            msg += f"      ... y {len(expired) - 5} más\n"
+    
+    msg += (
+        "\n<b>━━━━━━━━━━━━━━━━━━━━</b>\n"
+        " [!] Usa /limpiarkeys para borrar expiradas.\n"
+        "</code>"
+    )
+    
+    await update.message.reply_html(msg + FOOTER)
+
+# =====================================================================
+# >>>>>>>>>> COMANDO LIMPIARKEYS <<<<<<<<<<
+# =====================================================================
+async def limpiarkeys(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID: return
+    
+    keys = load_keys()
+    now = time.time()
+    
+    # Contar expiradas
+    expired_count = sum(1 for data in keys.values() if data.get("expires_at", 0) < now)
+    
+    if expired_count == 0:
+        await update.message.reply_html("<code>[!] No hay keys expiradas para limpiar.</code>")
+        return
+    
+    # Eliminar expiradas
+    keys_clean = {k: v for k, v in keys.items() if v.get("expires_at", 0) >= now}
+    save_keys(keys_clean)
+    
+    msg = (
+        "<code>\n"
+        " ╔══════════════════════════════════╗\n"
+        " ║   ░▒▓█ KEY CLEANUP DONE █▓▒░     ║\n"
+        " ╚══════════════════════════════════╝\n\n"
+        f" ❌ <b>ELIMINADAS:</b> {expired_count} keys expiradas\n"
+        f" ✅ <b>RESTANTES:</b> {len(keys_clean)} keys activas\n"
+        "</code>"
+    )
+    
+    await update.message.reply_html(msg + FOOTER)
+
+# =====================================================================
+# >>>>>>>>>> FIN COMANDOS LISTAKEYS <<<<<<<<<<
+# =====================================================================
+
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
     usuarios = cargar_json(USERS_FILE, [])
