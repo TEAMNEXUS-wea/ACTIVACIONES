@@ -234,7 +234,7 @@ def increment_user_hits(user):
     profiles[key] = profile
     guardar_json(PROFILES_FILE, profiles)
     return profile
---- SISTEMA DE KEYS DE ACCESO ---
+# --- SISTEMA DE KEYS DE ACCESO ---
 KEYS_FILE = "keys.json"
 
 def load_keys():
