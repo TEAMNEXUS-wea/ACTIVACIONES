@@ -680,28 +680,60 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(f"<code>[✔] DIFUSIÓN FINALIZADA\n[>] Exitos: {exitos}</code>")
 
 # =====================================================================
-# >>>>>>>>>> COMANDOS DE KEYS (NUEVO) <<<<<<<<<<
+# >>>>>>>>>> COMANDO GENKEY <<<<<<<<<<
 # =====================================================================
-async def generarkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID: return
     args = context.args
+    
+    # Valores por defecto
     days = 30
-    if args and args[0].isdigit():
+    quantity = 1
+    
+    # Parsear argumentos
+    if len(args) >= 1 and args[0].isdigit():
         days = int(args[0])
-    key, expires_at = add_key(days)
-    expires_date = datetime.fromtimestamp(expires_at).strftime("%Y-%m-%d %H:%M")
+    if len(args) >= 2 and args[1].isdigit():
+        quantity = int(args[1])
+    
+    # Limitar cantidad máxima para evitar spam
+    if quantity > 50:
+        await update.message.reply_html("<code>[!] LÍMITE: Máximo 50 keys por comando.</code>")
+        return
+    
+    # Generar las keys
+    generated_keys = []
+    for _ in range(quantity):
+        key, expires_at = add_key(days)
+        expires_date = datetime.fromtimestamp(expires_at).strftime("%Y-%m-%d %H:%M")
+        generated_keys.append((key, expires_date))
+    
+    # Construir mensaje
     msg = (
         "<code>\n"
         " ╔══════════════════════════════════╗\n"
-        " ║   ░▒▓█ KEY GENERATOR █▓▒░       ║\n"
+        " ║   ░▒▓█ KEY GENERATOR PRO █▓▒░    ║\n"
         " ╚══════════════════════════════════╝\n\n"
-        f" 🔑 <b>KEY:</b> <code>{key}</code>\n"
         f" ⏳ <b>DURACIÓN:</b> {days} días\n"
-        f" 📅 <b>EXPIRA:</b> {expires_date}\n\n"
-        " [!] Copia y envía esta key al usuario.\n"
+        f" 🔑 <b>CANTIDAD:</b> {quantity} keys\n\n"
+        " <b>━━━━━━━━━━━━━━━━━━━━</b>\n"
+    )
+    
+    # Agregar cada key al mensaje
+    for i, (key, expires_date) in enumerate(generated_keys, 1):
+        msg += f" [{i:02d}] <code>{key}</code>\n"
+    
+    msg += (
+        " <b>━━━━━━━━━━━━━━━━━━━━</b>\n"
+        f" 📅 <b>EXPIRAN:</b> {generated_keys[0][1]}\n\n"
+        " [!] Copia y envía estas keys a tus usuarios.\n"
         "</code>"
     )
+    
     await update.message.reply_html(msg + FOOTER)
+# =====================================================================
+# >>>>>>>>>> FIN COMANDO GENKEY <<<<<<<<<<
+# =====================================================================
 
 async def canjearkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -2052,7 +2084,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("tvyoutube", tv_youtube))
     app.add_handler(CommandHandler("check_disney", check_disney_bulk))
     # >>>>>>>>>> HANDLERS DE KEYS (NUEVO) <<<<<<<<<<
-    app.add_handler(CommandHandler("generarkey", generarkey))
+    app.add_handler(CommandHandler("genkey", genkey))
     app.add_handler(CommandHandler("canjearkey", canjearkey))
     app.add_handler(CommandHandler("estado", estado))
     # >>>>>>>>>> FIN HANDLERS DE KEYS <<<<<<<<<<
